@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
-from typing import Optional
 
 class RMSNorm(nn.Module):
+    """
+    RMSNorm层，继承自nn.Module，进行归一化操作
+    """
     def __init__(self, dim: int, eps: float):
         super().__init__()
         # eps是为了防止除以0的情况

@@ -1,6 +1,9 @@
 from transformers import PretrainedConfig
 
 class ModelConfig(PretrainedConfig):
+    """
+    存储和记录超参数
+    """
     model_type = "Tiny-K"
     def __init__(
             self,
