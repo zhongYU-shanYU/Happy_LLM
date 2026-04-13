@@ -1,14 +1,11 @@
 from RMSNorm import RMSNorm
+from ModelConfig import ModelConfig
 import torch
 
 # --- 测试代码 ---
-# 假设这是你的超参数配置
-class Args:
-    dim = 768
-    norm_eps = 1e-5
 
 if __name__ == '__main__':
-    args = Args()
+    args = ModelConfig()
 
     # 实例化模块
     norm = RMSNorm(args.dim, args.norm_eps)

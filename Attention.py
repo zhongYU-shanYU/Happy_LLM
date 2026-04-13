@@ -7,6 +7,15 @@ from typing import Tuple
 
 
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    重复键值对头以匹配查询头的数量。
+    该函数通过扩展和重塑操作，将键或值张量的头维度重复 n_rep 次，以便在多头注意力机制中与查询张量进行广播计算。
+    Args:
+        x (torch.Tensor): 输入张量，形状为 (batch_size 批量大小, seq_len 序列长度, n_kv_heads 键/值对头的数量, head_dim 每个头的维度大小)。
+        n_rep (int): 每个键/值头需要重复的次数。
+    Returns:
+        torch.Tensor: 重复后的张量，形状为 (batch_size, seq_len, n_kv_heads * n_rep, head_dim)。
+    """
     # 获取输入张量的形状：批量大小、序列长度、键/值对头的数量、每个头的维度大小
     bs, slen, n_kv_heads, head_dim = x.shape
 
@@ -24,6 +33,18 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # 注意：此处的dim应为 dim//n_head，因为我们是对每个head进行旋转嵌入
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+    """
+    预计算旋转位置编码（RoPE）所需的频率余弦和正弦值。
+    该函数根据给定的维度、序列长度和基频率 theta，生成用于旋转位置编码的余弦和正弦矩阵。这些矩阵通常用于Transformer模型中，以注入位置信息。
+    Args:
+        dim (int): 嵌入向量的维度，必须为偶数。
+        end (int): 序列的最大长度或位置索引的上限。
+        theta (float, optional): 基频率参数，用于控制频率衰减的速度。默认为 10000.0。
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: 一个包含两个张量的元组：
+            - freqs_cos (torch.Tensor): 形状为 (end, dim // 2) 的余弦值矩阵。
+            - freqs_sin (torch.Tensor): 形状为 (end, dim // 2) 的正弦值矩阵。
+    """
     # torch.arange(0, dim, 2)[: (dim // 2)].float()生成了一个从0开始，步长为2的序列，长度为dim的一半
     # 然后每个元素除以dim，再取theta的倒数，得到频率
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
@@ -39,6 +60,15 @@ def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
 
 
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+    """
+    调整 freqs_cis 的形状以支持与张量 x 的广播操作。
+    该函数将 freqs_cis 重塑为与 x 兼容的形状，使得 freqs_cis 可以在 x 的第1维和最后一维上进行广播，而其他维度保持为1。
+    参数:
+        freqs_cis (torch.Tensor): 需要调整形状的张量，其形状应为 (x.shape[1], x.shape[-1])。
+        x (torch.Tensor): 参考张量，用于确定目标形状的维度。
+    返回:
+        torch.Tensor: 重塑后的 freqs_cis 张量，形状与 x 兼容以进行广播。
+    """
     # 获取x的维度数
     ndim = x.ndim
 
@@ -61,7 +91,18 @@ def apply_rotary_emb(
     freqs_cos: torch.Tensor,
     freqs_sin: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-
+    """
+    应用旋转位置编码（Rotary Position Embedding, RoPE）到查询和键张量。
+    该函数通过将输入张量视为复数，并与预计算的频率余弦和正弦值进行旋转操作，
+    从而将位置信息注入到注意力机制的查询（Query）和键（Key）向量中。
+    Args:
+        xq (torch.Tensor): 查询张量，形状通常为 [batch_size, seq_len, num_heads, head_dim]。
+        xk (torch.Tensor): 键张量，形状通常为 [batch_size, seq_len, num_heads, head_dim]。
+        freqs_cos (torch.Tensor): 预计算的频率余弦值。
+        freqs_sin (torch.Tensor): 预计算的频率正弦值。
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: 包含应用了旋转位置编码后的查询张量和键张量的元组。
+    """
     # 将查询和键张量转换为浮点数，并重塑形状以分离实部和虚部
     xq_r, xq_i = xq.float().reshape(xq.shape[:-1] + (-1, 2)).unbind(-1)
     xk_r, xk_i = xk.float().reshape(xk.shape[:-1] + (-1, 2)).unbind(-1)
@@ -127,6 +168,14 @@ class Attention(nn.Module):
             self.register_buffer("mask", mask)
 
     def forward(self, x: torch.Tensor, freqs_cos: torch.Tensor, freqs_sin: torch.Tensor):
+        """执行前向传播，计算多头注意力机制。
+        Args:
+            x (torch.Tensor): 输入张量，形状为 [batch_size, seq_len, dim]。
+            freqs_cos (torch.Tensor): 旋转位置嵌入的余弦频率分量。
+            freqs_sin (torch.Tensor): 旋转位置嵌入的正弦频率分量。
+        Returns:
+            torch.Tensor: 经过注意力机制和输出投影后的张量，形状与输入 x 相同。
+        """
         # 获取批次大小和序列长度，[batch_size, seq_len, dim]
         bsz, seqlen, _ = x.shape
 
